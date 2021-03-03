@@ -10,16 +10,16 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.mikepenz.fastadapter.adapters.FastItemAdapter
 import com.mikepenz.fastadapter.app.databinding.ActivitySampleBinding
 import com.mikepenz.fastadapter.app.items.SimpleItem
+import com.mikepenz.fastadapter.diff.DiffCallback
 import com.mikepenz.fastadapter.diff.FastAdapterDiffUtil
 import com.mikepenz.iconics.IconicsDrawable
 import com.mikepenz.iconics.typeface.library.materialdesigniconic.MaterialDesignIconic
 import com.mikepenz.iconics.utils.actionBar
 import com.mikepenz.iconics.utils.colorInt
 import com.mikepenz.itemanimators.AlphaInAnimator
-import io.reactivex.Single
-import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
-import io.reactivex.schedulers.Schedulers
+import kotlinx.coroutines.*
+import kotlin.random.Random
 
 /**
  * Created by Aleksander Mielczarek on 07.08.2017.
@@ -51,7 +51,7 @@ class DiffUtilActivity : AppCompatActivity() {
         binding.rv.adapter = fastItemAdapter
 
         //fill with some sample data
-        setData()
+        setDataAsync()
 
         //set the back arrow in the toolbar
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
@@ -84,12 +84,10 @@ class DiffUtilActivity : AppCompatActivity() {
                 return true
             }
             R.id.item_refresh -> {
-                setData()
                 Toast.makeText(this, "Refresh synchronous", Toast.LENGTH_SHORT).show()
                 return true
             }
             R.id.item_refresh_async -> {
-                setDataAsync()
                 Toast.makeText(this, "Refresh asynchronous", Toast.LENGTH_SHORT).show()
                 return true
             }
@@ -102,24 +100,32 @@ class DiffUtilActivity : AppCompatActivity() {
         disposables.clear()
     }
 
-    private fun setData() {
-        val items = createData()
-        FastAdapterDiffUtil[fastItemAdapter.itemAdapter] = items
-    }
-
     private fun setDataAsync() {
-        disposables.add(Single.fromCallable { createData() }
-                .map { simpleItems -> FastAdapterDiffUtil.calculateDiff(fastItemAdapter.itemAdapter, simpleItems) }.subscribeOn(Schedulers.io())
-                .observeOn(AndroidSchedulers.mainThread())
-                .subscribe { result -> FastAdapterDiffUtil[fastItemAdapter.itemAdapter] = result })
+        MainScope().launch {
+            while (true) {
+                delay(100)
+                val data = createData()
+
+                try {
+                    withContext(Dispatchers.Default) {
+                        val result =
+                            FastAdapterDiffUtil.calculateDiff(fastItemAdapter.itemAdapter, data)
+                        withContext(Dispatchers.Main) {
+                            FastAdapterDiffUtil[fastItemAdapter.itemAdapter] = result
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
     }
 
     private fun createData(): List<SimpleItem> {
         val items = mutableListOf<SimpleItem>()
-        repeat(100) {
+        repeat(Random.nextInt(100)) {
             items.add(SimpleItem().withName("Item ${it + 1}").withIdentifier((it + 1).toLong()))
         }
-        items.shuffle()
         return items
     }
 }
